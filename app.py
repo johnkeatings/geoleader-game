@@ -292,7 +292,7 @@ if st.session_state.current_user is None:
     
     with col_left:
         st.subheader("Select Profile:")
-        selected_player = st.selectbox("Who is playing?", ["Eric", "Elliott", "Mark", "Nate", "John"])
+        selected_player = st.selectbox("Who is playing?", ["Eric", "Elliott", "Mark", "Nate", "John", "Evan", "Megan"])
         st.caption(f"🗓️ Map Seed: **{today_str}**")
         st.caption("🔒 *Note: PIN verification for profiles coming soon.*")
         
