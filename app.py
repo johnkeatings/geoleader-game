@@ -11,7 +11,6 @@ import random
 def get_all_scores_df():
     """Helper to fetch the master dataframe from the summary sheet."""
     try:
-        # CONFIGURED FOR LOCAL VS CODE WORKSPACE
         gc = gspread.service_account_from_dict(st.secrets["gspread"])
         worksheet = gc.open("GeoLeader Database").worksheet("Master_Scores")
         all_records = worksheet.get_all_records()
@@ -28,7 +27,6 @@ def get_all_scores_df():
 def push_full_game_data(player_name, final_score, detailed_rounds):
     """Logs data to both sheets simultaneously in a relational manner."""
     try:
-        # CONFIGURED FOR LOCAL VS CODE WORKSPACE
         gc = gspread.service_account_from_dict(st.secrets["gspread"])
         sheet = gc.open("GeoLeader Database") 
         today_date = datetime.date.today().strftime("%Y-%m-%d")
@@ -272,14 +270,12 @@ if "score_submitted" not in st.session_state:
 st.set_page_config(page_title="GeoLeader", page_icon="📍", layout="wide")
 
 st.markdown("""
-<style>
-    .folium-container { 
-        border-radius: 50% !important; 
-        border: 8px solid #333; 
-        overflow: hidden; 
-        margin: 20px auto; 
-        /* Ensure the map stays circular even during interaction */
-        clip-path: circle(50%); 
+    <style>
+    .folium-map, .leaflet-container, .leaflet-interactive, .leaflet-pane, .leaflet-grab, .leaflet-dragging {
+        cursor: crosshair !important;
+    }
+    .leaflet-grab:active, .leaflet-dragging:active {
+        cursor: crosshair !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -292,7 +288,7 @@ if st.session_state.current_user is None:
     
     with col_left:
         st.subheader("Select Profile:")
-        selected_player = st.selectbox("Who is playing?", ["Eric", "Elliott", "Mark", "Nate", "John", "Evan", "Megan"])
+        selected_player = st.selectbox("Who is playing?", ["Eric", "Elliott", "Mark", "Nate", "John", "Megan", "Evan"])
         st.caption(f"🗓️ Map Seed: **{today_str}**")
         st.caption("🔒 *Note: PIN verification for profiles coming soon.*")
         
@@ -372,7 +368,6 @@ else:
             # --- CONDENSED SHARE SCORE CLIPBOARD ENGINE ---
             st.markdown("### 📣 Share Your Results")
             
-            # Ultra condensed Wordle style line layout
             emojis_line = ""
             for r in st.session_state.game_round_history:
                 emojis_line += "🟩" if r['points_earned'] >= 4500 else ("🟨" if r['points_earned'] >= 3000 else "🟥")
@@ -381,7 +376,7 @@ else:
                 f"📍 GeoLeader ({today_str})",
                 f"👤 {st.session_state.current_user}: {st.session_state.total_score:,} pts",
                 emojis_line,
-                "www.geoleader.streamlit.app"
+                "geoleader.streamlit.app"
             ]
             
             raw_js_text = "\\n".join(summary_lines)
@@ -439,25 +434,18 @@ else:
                 st.markdown("### 📈 Running Total")
                 st.markdown(f"**{st.session_state.total_score:,} pts**")
 
-            # GUESSING PHASE (ORBITAL GLOBE SAT RENDER)
+            # GUESSING PHASE
             if not st.session_state.has_guessed:
-                # Centered over the middle of the planet at Zoom 1 to create an orbital visual capsule look
                 m = folium.Map(
                     location=[15.0, -25.0], 
                     zoom_start=2, 
                     tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
                     attr="Esri World Imagery",
-                    zoom_control=True,      # Enable zoom +/- buttons
-                    scrollWheelZoom=True    # Enable mouse wheel scrolling
+                    world_copy_jump=True,
+                    no_wrap=True
                 )
-                map_click_data = st_folium(
-                    m, 
-                    width=900, 
-                    height=500, 
-                    key=f"map_r_{round_num}"
-                )
+                map_click_data = st_folium(m, width=900, height=500, key=f"map_r_{round_num}")
                 
-                # --- FIND THIS IN YOUR GUESSING PHASE ---
                 if map_click_data and map_click_data.get("last_clicked"):
                     click_lat = map_click_data["last_clicked"]["lat"]
                     click_lng = map_click_data["last_clicked"]["lng"]
@@ -465,32 +453,45 @@ else:
                     st.session_state.last_guess_lat = click_lat
                     st.session_state.last_guess_lng = click_lng
                     
-                    # CALCULATE REVEAL BOUNDS HERE BEFORE RERUN
                     score, distance = calculate_geoleader_score(click_lat, click_lng, active_target['lat'], active_target['lng'])
                     st.session_state.latest_score = score
                     st.session_state.latest_distance = distance
                     st.session_state.has_guessed = True
                     st.rerun()
                     
-            # --- FIND THIS IN YOUR REVEAL PHASE ---
-                else:
-                    # Instead of forcing a static mid_lat/mid_lng location:
-                    m_reveal = folium.Map(
-                        tiles="https://{s}.basemaps.cartocdn.com/rastertiles/light_nolabels/{z}/{x}/{y}.png",
-                        attr="CartoDB Positron No Labels"
-                    )
-                    
-                    # Add your markers and lines exactly like you have them...
-                    folium.Marker([st.session_state.last_guess_lat, st.session_state.last_guess_lng], ...).add_to(m_reveal)
-                    folium.Marker([active_target['lat'], active_target['lng']], ...).add_to(m_reveal)
-                    
-                    # THE magic fix line: Forces the reveal map to auto-zoom tightly into the action zone
-                    m_reveal.fit_bounds([
-                        [st.session_state.last_guess_lat, st.session_state.last_guess_lng], 
-                        [active_target['lat'], active_target['lng']]
-                    ])
-                    
-                    st_folium(m_reveal, width=900, height=500, key=f"map_result_{round_num}")
+            # REVEAL PHASE WITH ZOOM FIX
+            else:
+                m_reveal = folium.Map(
+                    tiles="https://{s}.basemaps.cartocdn.com/rastertiles/light_nolabels/{z}/{x}/{y}.png",
+                    attr="CartoDB Positron No Labels"
+                )
+                
+                folium.Marker(
+                    [st.session_state.last_guess_lat, st.session_state.last_guess_lng], 
+                    tooltip="Your Guess", 
+                    icon=folium.Icon(color="red", icon="crosshair", prefix="fa")
+                ).add_to(m_reveal)
+                
+                folium.Marker(
+                    [active_target['lat'], active_target['lng']], 
+                    tooltip=active_target['city'], 
+                    icon=folium.Icon(color="green", icon="check", prefix="fa")
+                ).add_to(m_reveal)
+                
+                folium.PolyLine(
+                    locations=[[st.session_state.last_guess_lat, st.session_state.last_guess_lng], [active_target['lat'], active_target['lng']]], 
+                    color="black", 
+                    weight=3, 
+                    dash_array="5, 10"
+                ).add_to(m_reveal)
+                
+                # Dynamic positioning boundary fix
+                m_reveal.fit_bounds([
+                    [st.session_state.last_guess_lat, st.session_state.last_guess_lng], 
+                    [active_target['lat'], active_target['lng']]
+                ], padding=(50, 50))
+                
+                st_folium(m_reveal, width=900, height=500, key=f"map_result_{round_num}")
 
             if st.session_state.has_guessed:
                 st.markdown("---")
