@@ -381,7 +381,7 @@ else:
                 f"📍 GeoLeader ({today_str})",
                 f"👤 {st.session_state.current_user}: {st.session_state.total_score:,} pts",
                 emojis_line,
-                "https://geoleader.streamlit.app"
+                "geoleader.streamlit.app"
             ]
             
             raw_js_text = "\\n".join(summary_lines)
