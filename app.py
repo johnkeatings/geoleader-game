@@ -11,17 +11,17 @@ import random
 def get_all_scores_df():
     """Helper to fetch the master dataframe from the summary sheet."""
     try:
+        # CONFIGURED FOR STREAMLIT CLOUD PRODUCTION
         gc = gspread.service_account_from_dict(st.secrets["gspread"])
-        sheet = gc.open("GeoLeader Database")
-        # Explicitly target the master summary tab
-        worksheet = sheet.worksheet("Master_Scores")
+        worksheet = gc.open("GeoLeader Database").worksheet("Master_Scores")
         all_records = worksheet.get_all_records()
         if not all_records:
             return pd.DataFrame(columns=['Date', 'Player', 'Score'])
         
         df = pd.DataFrame(all_records)
         df['Score'] = pd.to_numeric(df['Score'], errors='coerce')
-        df['Date'] = pd.to_datetime(df['Date'], errors='coerce').dt.date
+        # Standardize dates to strings for robust matching
+        df['Date'] = pd.to_datetime(df['Date'], errors='coerce').dt.strftime("%Y-%m-%d")
         return df.dropna(subset=['Score', 'Date'])
     except Exception as e:
         return pd.DataFrame(columns=['Date', 'Player', 'Score'])
@@ -29,6 +29,7 @@ def get_all_scores_df():
 def push_full_game_data(player_name, final_score, detailed_rounds):
     """Logs data to both sheets simultaneously in a relational manner."""
     try:
+        # CONFIGURED FOR STREAMLIT CLOUD PRODUCTION
         gc = gspread.service_account_from_dict(st.secrets["gspread"])
         sheet = gc.open("GeoLeader Database") 
         today_date = datetime.date.today().strftime("%Y-%m-%d")
@@ -61,26 +62,27 @@ def has_user_played_today(player_name):
     df = get_all_scores_df()
     if df.empty:
         return False
-    today = datetime.date.today()
-    played_today = df[(df['Date'] == today) & (df['Player'] == player_name)]
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    played_today = df[(df['Date'] == today_str) & (df['Player'] == player_name)]
     return len(played_today) > 0
 
 # --- 3. TIMEFRAME LEADERBOARDS ---
 def get_leaderboards():
     """Generates filtered DataFrames for Daily, Weekly, and Monthly tracking."""
     df = get_all_scores_df()
-    today = datetime.date.today()
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
     
     if df.empty:
         return None, None, None
 
     # Daily
-    daily_df = df[df['Date'] == today].sort_values(by='Score', ascending=False).reset_index(drop=True)
+    daily_df = df[df['Date'] == today_str].sort_values(by='Score', ascending=False).reset_index(drop=True)
     daily_df.index = daily_df.index + 1
     daily_table = daily_df[['Player', 'Score']] if not daily_df.empty else pd.DataFrame()
 
     # Weekly
-    last_7_days = today - datetime.timedelta(days=7)
+    today = datetime.date.today()
+    last_7_days = (today - datetime.timedelta(days=7)).strftime("%Y-%m-%d")
     weekly_filter = df[df['Date'] >= last_7_days]
     weekly_df = weekly_filter.groupby('Player')['Score'].max().reset_index()
     weekly_df = weekly_df.sort_values(by='Score', ascending=False).reset_index(drop=True)
@@ -88,7 +90,7 @@ def get_leaderboards():
     weekly_table = weekly_df if not weekly_df.empty else pd.DataFrame()
 
     # Monthly
-    last_30_days = today - datetime.timedelta(days=30)
+    last_30_days = (today - datetime.timedelta(days=30)).strftime("%Y-%m-%d")
     monthly_filter = df[df['Date'] >= last_30_days]
     monthly_df = monthly_filter.groupby('Player')['Score'].max().reset_index()
     monthly_df = monthly_df.sort_values(by='Score', ascending=False).reset_index(drop=True)
@@ -97,7 +99,37 @@ def get_leaderboards():
 
     return daily_table, weekly_table, monthly_table
 
-# --- 4. HAVERSINE MATH ENGINE ---
+# --- 4. ADVANCED LEAGUE ANALYTICS ---
+def get_historical_analytics():
+    """Processes historical records to calculate daily champions and running tallies."""
+    df = get_all_scores_df()
+    if df.empty:
+        return pd.DataFrame(), pd.DataFrame()
+    
+    # Calculate Daily Champions
+    idx_max = df.groupby('Date')['Score'].idxmax()
+    daily_winners_df = df.loc[idx_max].sort_values(by='Date', ascending=False).reset_index(drop=True)
+    
+    # Calculate running crown tally
+    crown_counts = daily_winners_df['Player'].value_counts().reset_index()
+    crown_counts.columns = ['Player', 'Total Wins 👑']
+    
+    # Calculate historical average score per player
+    avg_scores = df.groupby('Player')['Score'].mean().round(0).reset_index()
+    avg_scores.columns = ['Player', 'Avg Score 🎯']
+    
+    # Merge tallies and averages into a Master Hall of Fame table
+    hall_of_fame = pd.merge(crown_counts, avg_scores, on='Player', how='outer').fillna(0)
+    hall_of_fame['Total Wins 👑'] = hall_of_fame['Total Wins 👑'].astype(int)
+    hall_of_fame = hall_of_fame.sort_values(by='Total Wins 👑', ascending=False).reset_index(drop=True)
+    hall_of_fame.index = hall_of_fame.index + 1
+    
+    # Format detailed history log
+    daily_winners_log = daily_winners_df[['Date', 'Player', 'Score']].rename(columns={'Player': 'Daily Champion 👑', 'Score': 'Winning Score'})
+    
+    return hall_of_fame, daily_winners_log
+
+# --- 5. HAVERSINE MATH ENGINE ---
 def calculate_geoleader_score(user_lat, user_lng, target_lat, target_lng):
     rlat1, rlng1 = math.radians(user_lat), math.radians(user_lng)
     rlat2, rlng2 = math.radians(target_lat), math.radians(target_lng)
@@ -110,7 +142,7 @@ def calculate_geoleader_score(user_lat, user_lng, target_lat, target_lng):
     final_score = max_score - (distance_km * penalty_per_km)
     return max(0, round(final_score)), round(distance_km)
 
-# --- 5. MASTER GEOGRAPHY POOL (100 Curated Global Cities) ---
+# --- 6. MASTER GEOGRAPHY POOL ---
 GLOBAL_CITY_POOL = [
     # --- Americas ---
     {"city": "New York City, USA", "lat": 40.7128, "lng": -74.0060},
@@ -219,12 +251,12 @@ GLOBAL_CITY_POOL = [
     {"city": "Solomon Islands (Honiara)", "lat": -9.4333, "lng": 159.9500}
 ]
 
-# --- 6. DAILY SEED ALGORITHM ---
+# --- 7. DAILY SEED ALGORITHM ---
 today_str = datetime.date.today().strftime("%Y-%m-%d")
 local_random = random.Random(today_str)
 DAILY_CITIES = local_random.sample(GLOBAL_CITY_POOL, 5)
 
-# --- 7. STATE ENGINE ---
+# --- 8. STATE ENGINE ---
 if "current_user" not in st.session_state:
     st.session_state.current_user = None
 if "current_round" not in st.session_state:
@@ -232,7 +264,7 @@ if "current_round" not in st.session_state:
 if "total_score" not in st.session_state:
     st.session_state.total_score = 0
 if "game_round_history" not in st.session_state:
-    st.session_state.game_round_history = []  # Tracks precise round items for relational sheet logs
+    st.session_state.game_round_history = []
 if "has_guessed" not in st.session_state:
     st.session_state.has_guessed = False
 if "last_guess_lat" not in st.session_state:
@@ -242,8 +274,8 @@ if "last_guess_lng" not in st.session_state:
 if "score_submitted" not in st.session_state:
     st.session_state.score_submitted = False
 
-# --- 8. INTERFACE CONFIG ---
-st.set_page_config(page_title="GeoLeader", page_icon="📍", layout="centered")
+# --- 9. INTERFACE CONFIG ---
+st.set_page_config(page_title="GeoLeader", page_icon="📍", layout="wide")
 
 st.markdown("""
     <style>
@@ -260,28 +292,39 @@ st.markdown("""
 if st.session_state.current_user is None:
     st.title("📱 Welcome to GeoLeader Leagues")
     
-    col_left, col_right = st.columns([1, 1.3])
+    col_left, col_right = st.columns([1, 1.5])
     
     with col_left:
         st.subheader("Select Profile:")
         selected_player = st.selectbox("Who is playing?", ["Eric", "Elliott", "Mark", "Nate", "John"])
         st.caption(f"🗓️ Map Seed: **{today_str}**")
-        
-        # Identity lock disclaimer placeholder
-        st.caption("🔒 *Note: PIN/Password verification for accounts is coming soon to prevent impersonation.*")
+        st.caption("🔒 *Note: PIN verification for profiles coming soon.*")
         
         already_played = has_user_played_today(selected_player)
         
         if already_played:
-            st.error(f"⚠️ {selected_player} has locked in their score for today! No multi-submitting allowed.")
+            st.error(f"⚠️ {selected_player} has locked in their score for today!")
             st.button("Start Game 🚀", disabled=True, use_container_width=True)
         else:
             if st.button("Start Game 🚀", use_container_width=True):
                 st.session_state.current_user = selected_player
                 st.rerun()
+                
+        st.markdown("---")
+        st.subheader("📊 League Analytics (All-Time)")
+        hall_of_fame_df, daily_log_df = get_historical_analytics()
+        
+        if not hall_of_fame_df.empty:
+            st.markdown("**Crown Standings & Consistency**")
+            st.dataframe(hall_of_fame_df, use_container_width=True)
+            
+            st.markdown("**Historical Daily Winner Log**")
+            st.dataframe(daily_log_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("Accumulate more match histories to generate the Hall of Fame data!")
             
     with col_right:
-        st.subheader("🏆 League Standings")
+        st.subheader("🏆 Current Tournament Standings")
         daily_t, weekly_t, monthly_t = get_leaderboards()
         
         tab1, tab2, tab3 = st.tabs(["⚡ Daily", "📅 Weekly", "🌕 Monthly"])
@@ -309,108 +352,153 @@ if st.session_state.current_user is None:
 
 # --- MAIN GAME PLAY LOOP ---
 else:
-    st.title("🏆 Daily GeoLeader Challenge")
+    _, game_center_col, _ = st.columns([1, 4, 1])
     
-    if st.session_state.current_round >= len(DAILY_CITIES):
-        st.header("🏁 Game Over!")
-        st.subheader(f"Final Score: {st.session_state.total_score:,} / 25,000 pts")
+    with game_center_col:
+        st.title("🏆 Daily GeoLeader Challenge")
         
-        if not st.session_state.score_submitted:
-            with st.spinner("Logging score and round breakdowns securely..."):
-                # Execute transactional synchronization into both tabs
-                success = push_full_game_data(
-                    st.session_state.current_user, 
-                    st.session_state.total_score,
-                    st.session_state.game_round_history
-                )
-                if success:
-                    st.session_state.score_submitted = True
-                    st.success(f"🎉 All deep stats synced for {st.session_state.current_user}!")
-                    st.balloons()
-        
-        st.write("### Today's Performance Breakdown:")
-        for r in st.session_state.game_round_history:
-            st.write(f"📍 Round {r['round']} ({r['target_city']}): **{r['points_earned']:,} pts** ({r['distance_km']:,} km miss)")
+        if st.session_state.current_round >= len(DAILY_CITIES):
+            st.header("🏁 Game Over!")
+            st.subheader(f"Final Score: {st.session_state.total_score:,} / 25,000 pts")
             
-        if st.button("Return to Hub"):
-            st.session_state.current_user = None
-            st.session_state.current_round = 0
-            st.session_state.total_score = 0
-            st.session_state.game_round_history = []
-            st.session_state.has_guessed = False
-            st.session_state.score_submitted = False
-            st.rerun()
+            if not st.session_state.score_submitted:
+                with st.spinner("Logging score and round breakdowns securely..."):
+                    success = push_full_game_data(
+                        st.session_state.current_user, 
+                        st.session_state.total_score,
+                        st.session_state.game_round_history
+                    )
+                    if success:
+                        st.session_state.score_submitted = True
+                        st.success(f"🎉 All deep stats synced for {st.session_state.current_user}!")
+                        st.balloons()
+            
+            # --- SHARE SCORE CLIPBOARD ENGINE ---
+            st.markdown("### 📣 Share Your Results")
+            
+            summary_lines = [
+                f"📍 GeoLeader Challenge ({today_str})",
+                f"👤 Player: {st.session_state.current_user}",
+                f"🏆 Final Score: {st.session_state.total_score:,} / 25,000 pts"
+            ]
+            
+            for r in st.session_state.game_round_history:
+                emoji = "🟩" if r['points_earned'] >= 4500 else ("🟨" if r['points_earned'] >= 3000 else "🟥")
+                summary_lines.append(f"{emoji} R{r['round']}: {r['points_earned']:,} pts ({r['distance_km']:,} km miss)")
+            
+            summary_lines.append("\\nPlay live at: https://geoleader.streamlit.app")
+            raw_js_text = "\\n".join(summary_lines)
 
-    else:
-        round_num = st.session_state.current_round
-        active_target = DAILY_CITIES[round_num]
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown(f"👤 Player: **{st.session_state.current_user}**")
-            st.markdown(f"🎯 Round {round_num + 1} of 5 — Find: **{active_target['city']}**")
-        with col2:
-            st.markdown("### 📈 Running Total")
-            st.markdown(f"**{st.session_state.total_score:,} pts**")
-
-        # GUESSING PHASE: Raw, completely unlabelled Esri Satellite Imagery
-        if not st.session_state.has_guessed:
-            m = folium.Map(
-                location=[20, 0], 
-                zoom_start=1, 
-                tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-                attr="Esri World Imagery"
-            )
-            map_click_data = st_folium(m, width=700, height=400, key=f"map_r_{round_num}")
+            components_html = f"""
+            <script>
+            function copyToClipboard() {{
+                const el = document.createElement('textarea');
+                el.value = `{raw_js_text}`;
+                document.body.appendChild(el);
+                el.select();
+                document.execCommand('copy');
+                document.body.removeChild(el);
+                alert('🏆 Score copied to clipboard! Paste it into your group chat!');
+            }}
+            </script>
+            <button onclick="copyToClipboard()" style="
+                width: 100%; 
+                background-color: #FF4B4B; 
+                color: white; 
+                padding: 12px 24px; 
+                border: none; 
+                border-radius: 8px; 
+                font-size: 16px; 
+                font-weight: bold;
+                cursor: pointer;
+                box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
+            ">📋 Copy Share Text</button>
+            """
+            st.components.v1.html(components_html, height=65)
             
-            if map_click_data and map_click_data.get("last_clicked"):
-                click_lat = map_click_data["last_clicked"]["lat"]
-                click_lng = map_click_data["last_clicked"]["lng"]
-                
-                st.session_state.last_guess_lat = click_lat
-                st.session_state.last_guess_lng = click_lng
-                
-                score, distance = calculate_geoleader_score(click_lat, click_lng, active_target['lat'], active_target['lng'])
-                st.session_state.latest_score = score
-                st.session_state.latest_distance = distance
-                st.session_state.has_guessed = True
-                st.rerun()
-                
-        # REVEAL PHASE: Dynamic centering + switch to completely UNLABELLED CartoDB canvas layout
-        else:
-            mid_lat = (st.session_state.last_guess_lat + active_target['lat']) / 2
-            mid_lng = (st.session_state.last_guess_lng + active_target['lng']) / 2
-            
-            m_reveal = folium.Map(
-                location=[mid_lat, mid_lng], 
-                zoom_start=3, 
-                tiles="https://{s}.basemaps.cartocdn.com/rastertiles/light_nolabels/{z}/{x}/{y}.png",
-                attr="CartoDB Positron No Labels"
-            )
-            
-            folium.Marker([st.session_state.last_guess_lat, st.session_state.last_guess_lng], tooltip="Your Guess", icon=folium.Icon(color="red", icon="crosshair", prefix="fa")).add_to(m_reveal)
-            folium.Marker([active_target['lat'], active_target['lng']], tooltip=active_target['city'], icon=folium.Icon(color="green", icon="check", prefix="fa")).add_to(m_reveal)
-            folium.PolyLine(locations=[[st.session_state.last_guess_lat, st.session_state.last_guess_lng], [active_target['lat'], active_target['lng']]], color="black", weight=3, dash_array="5, 10").add_to(m_reveal)
-            
-            st_folium(m_reveal, width=700, height=400, key=f"map_result_{round_num}")
-
-        if st.session_state.has_guessed:
             st.markdown("---")
-            st.metric("Points Earned", f"+{st.session_state.latest_score:,} pts")
-            st.write(f"You missed by {st.session_state.latest_distance:,} km.")
-            
-            if st.button("Next Round ➡️"):
-                # Append precise metrics into state prior to loading next turn
-                st.session_state.game_round_history.append({
-                    "round": round_num + 1,
-                    "target_city": active_target['city'],
-                    "distance_km": st.session_state.latest_distance,
-                    "points_earned": st.session_state.latest_score
-                })
+            st.write("### Today's Performance Breakdown:")
+            for r in st.session_state.game_round_history:
+                st.write(f"📍 Round {r['round']} ({r['target_city']}): **{r['points_earned']:,} pts** ({r['distance_km']:,} km miss)")
                 
-                st.session_state.total_score += st.session_state.latest_score
-                st.session_state.current_round += 1
+            if st.button("Return to Hub", use_container_width=True):
+                st.session_state.current_user = None
+                st.session_state.current_round = 0
+                st.session_state.total_score = 0
+                st.session_state.game_round_history = []
                 st.session_state.has_guessed = False
-                st.session_state.last_guess_lat = None
-                st.session_state.last_guess_lng = None
+                st.session_state.score_submitted = False
                 st.rerun()
+
+        else:
+            round_num = st.session_state.current_round
+            active_target = DAILY_CITIES[round_num]
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"👤 Player: **{st.session_state.current_user}**")
+                st.markdown(f"🎯 Round {round_num + 1} of 5 — Find: **{active_target['city']}**")
+            with col2:
+                st.markdown("### 📈 Running Total")
+                st.markdown(f"**{st.session_state.total_score:,} pts**")
+
+            # GUESSING PHASE
+            if not st.session_state.has_guessed:
+                m = folium.Map(
+                    location=[20, 0], 
+                    zoom_start=1, 
+                    tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+                    attr="Esri World Imagery"
+                )
+                map_click_data = st_folium(m, width=900, height=500, key=f"map_r_{round_num}")
+                
+                if map_click_data and map_click_data.get("last_clicked"):
+                    click_lat = map_click_data["last_clicked"]["lat"]
+                    click_lng = map_click_data["last_clicked"]["lng"]
+                    
+                    st.session_state.last_guess_lat = click_lat
+                    st.session_state.last_guess_lng = click_lng
+                    
+                    score, distance = calculate_geoleader_score(click_lat, click_lng, active_target['lat'], active_target['lng'])
+                    st.session_state.latest_score = score
+                    st.session_state.latest_distance = distance
+                    st.session_state.has_guessed = True
+                    st.rerun()
+                    
+            # REVEAL PHASE
+            else:
+                mid_lat = (st.session_state.last_guess_lat + active_target['lat']) / 2
+                mid_lng = (st.session_state.last_guess_lng + active_target['lng']) / 2
+                
+                m_reveal = folium.Map(
+                    location=[mid_lat, mid_lng], 
+                    zoom_start=3, 
+                    tiles="https://{s}.basemaps.cartocdn.com/rastertiles/light_nolabels/{z}/{x}/{y}.png",
+                    attr="CartoDB Positron No Labels"
+                )
+                
+                folium.Marker([st.session_state.last_guess_lat, st.session_state.last_guess_lng], tooltip="Your Guess", icon=folium.Icon(color="red", icon="crosshair", prefix="fa")).add_to(m_reveal)
+                folium.Marker([active_target['lat'], active_target['lng']], tooltip=active_target['city'], icon=folium.Icon(color="green", icon="check", prefix="fa")).add_to(m_reveal)
+                folium.PolyLine(locations=[[st.session_state.last_guess_lat, st.session_state.last_guess_lng], [active_target['lat'], active_target['lng']]], color="black", weight=3, dash_array="5, 10").add_to(m_reveal)
+                
+                st_folium(m_reveal, width=900, height=500, key=f"map_result_{round_num}")
+
+            if st.session_state.has_guessed:
+                st.markdown("---")
+                st.metric("Points Earned", f"+{st.session_state.latest_score:,} pts")
+                st.write(f"You missed by {st.session_state.latest_distance:,} km.")
+                
+                if st.button("Next Round ➡️", use_container_width=True):
+                    st.session_state.game_round_history.append({
+                        "round": round_num + 1,
+                        "target_city": active_target['city'],
+                        "distance_km": st.session_state.latest_distance,
+                        "points_earned": st.session_state.latest_score
+                    })
+                    
+                    st.session_state.total_score += st.session_state.latest_score
+                    st.session_state.current_round += 1
+                    st.session_state.has_guessed = False
+                    st.session_state.last_guess_lat = None
+                    st.session_state.last_guess_lng = None
+                    st.rerun()
