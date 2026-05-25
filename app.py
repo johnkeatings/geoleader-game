@@ -457,6 +457,7 @@ else:
                     key=f"map_r_{round_num}"
                 )
                 
+                # --- FIND THIS IN YOUR GUESSING PHASE ---
                 if map_click_data and map_click_data.get("last_clicked"):
                     click_lat = map_click_data["last_clicked"]["lat"]
                     click_lng = map_click_data["last_clicked"]["lng"]
@@ -464,29 +465,32 @@ else:
                     st.session_state.last_guess_lat = click_lat
                     st.session_state.last_guess_lng = click_lng
                     
+                    # CALCULATE REVEAL BOUNDS HERE BEFORE RERUN
                     score, distance = calculate_geoleader_score(click_lat, click_lng, active_target['lat'], active_target['lng'])
                     st.session_state.latest_score = score
                     st.session_state.latest_distance = distance
                     st.session_state.has_guessed = True
                     st.rerun()
                     
-            # REVEAL PHASE
-            else:
-                mid_lat = (st.session_state.last_guess_lat + active_target['lat']) / 2
-                mid_lng = (st.session_state.last_guess_lng + active_target['lng']) / 2
-                
-                m_reveal = folium.Map(
-                    location=[mid_lat, mid_lng], 
-                    zoom_start=2, 
-                    tiles="https://{s}.basemaps.cartocdn.com/rastertiles/light_nolabels/{z}/{x}/{y}.png",
-                    attr="CartoDB Positron No Labels"
-                )
-                
-                folium.Marker([st.session_state.last_guess_lat, st.session_state.last_guess_lng], tooltip="Your Guess", icon=folium.Icon(color="red", icon="crosshair", prefix="fa")).add_to(m_reveal)
-                folium.Marker([active_target['lat'], active_target['lng']], tooltip=active_target['city'], icon=folium.Icon(color="green", icon="check", prefix="fa")).add_to(m_reveal)
-                folium.PolyLine(locations=[[st.session_state.last_guess_lat, st.session_state.last_guess_lng], [active_target['lat'], active_target['lng']]], color="black", weight=3, dash_array="5, 10").add_to(m_reveal)
-                
-                st_folium(m_reveal, width=900, height=500, key=f"map_result_{round_num}")
+            # --- FIND THIS IN YOUR REVEAL PHASE ---
+                else:
+                    # Instead of forcing a static mid_lat/mid_lng location:
+                    m_reveal = folium.Map(
+                        tiles="https://{s}.basemaps.cartocdn.com/rastertiles/light_nolabels/{z}/{x}/{y}.png",
+                        attr="CartoDB Positron No Labels"
+                    )
+                    
+                    # Add your markers and lines exactly like you have them...
+                    folium.Marker([st.session_state.last_guess_lat, st.session_state.last_guess_lng], ...).add_to(m_reveal)
+                    folium.Marker([active_target['lat'], active_target['lng']], ...).add_to(m_reveal)
+                    
+                    # THE magic fix line: Forces the reveal map to auto-zoom tightly into the action zone
+                    m_reveal.fit_bounds([
+                        [st.session_state.last_guess_lat, st.session_state.last_guess_lng], 
+                        [active_target['lat'], active_target['lng']]
+                    ])
+                    
+                    st_folium(m_reveal, width=900, height=500, key=f"map_result_{round_num}")
 
             if st.session_state.has_guessed:
                 st.markdown("---")
