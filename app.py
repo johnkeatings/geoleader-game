@@ -29,7 +29,7 @@ def get_all_scores_df():
 def push_full_game_data(player_name, final_score, detailed_rounds):
     """Logs data to both sheets simultaneously in a relational manner."""
     try:
-        gc = gspread.service_account(filename="credentials.json")
+        gc = gspread.service_account_from_dict(st.secrets["gspread"])
         sheet = gc.open("GeoLeader Database") 
         today_date = datetime.date.today().strftime("%Y-%m-%d")
         
