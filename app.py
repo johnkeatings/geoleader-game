@@ -11,7 +11,7 @@ import random
 def get_all_scores_df():
     """Helper to fetch the master dataframe from the summary sheet."""
     try:
-        gc = gspread.service_account(filename="credentials.json")
+        gc = gspread.service_account_from_dict(st.secrets["gspread"])
         sheet = gc.open("GeoLeader Database")
         # Explicitly target the master summary tab
         worksheet = sheet.worksheet("Master_Scores")
