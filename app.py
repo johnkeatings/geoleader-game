@@ -11,7 +11,7 @@ import random
 def get_all_scores_df():
     """Helper to fetch the master dataframe from the summary sheet."""
     try:
-        # CONFIGURED FOR STREAMLIT CLOUD PRODUCTION
+        # CONFIGURED FOR LOCAL VS CODE WORKSPACE
         gc = gspread.service_account_from_dict(st.secrets["gspread"])
         worksheet = gc.open("GeoLeader Database").worksheet("Master_Scores")
         all_records = worksheet.get_all_records()
@@ -20,7 +20,6 @@ def get_all_scores_df():
         
         df = pd.DataFrame(all_records)
         df['Score'] = pd.to_numeric(df['Score'], errors='coerce')
-        # Standardize dates to strings for robust matching
         df['Date'] = pd.to_datetime(df['Date'], errors='coerce').dt.strftime("%Y-%m-%d")
         return df.dropna(subset=['Score', 'Date'])
     except Exception as e:
@@ -29,7 +28,7 @@ def get_all_scores_df():
 def push_full_game_data(player_name, final_score, detailed_rounds):
     """Logs data to both sheets simultaneously in a relational manner."""
     try:
-        # CONFIGURED FOR STREAMLIT CLOUD PRODUCTION
+        # CONFIGURED FOR LOCAL VS CODE WORKSPACE
         gc = gspread.service_account_from_dict(st.secrets["gspread"])
         sheet = gc.open("GeoLeader Database") 
         today_date = datetime.date.today().strftime("%Y-%m-%d")
@@ -106,25 +105,20 @@ def get_historical_analytics():
     if df.empty:
         return pd.DataFrame(), pd.DataFrame()
     
-    # Calculate Daily Champions
     idx_max = df.groupby('Date')['Score'].idxmax()
     daily_winners_df = df.loc[idx_max].sort_values(by='Date', ascending=False).reset_index(drop=True)
     
-    # Calculate running crown tally
     crown_counts = daily_winners_df['Player'].value_counts().reset_index()
     crown_counts.columns = ['Player', 'Total Wins 👑']
     
-    # Calculate historical average score per player
     avg_scores = df.groupby('Player')['Score'].mean().round(0).reset_index()
     avg_scores.columns = ['Player', 'Avg Score 🎯']
     
-    # Merge tallies and averages into a Master Hall of Fame table
     hall_of_fame = pd.merge(crown_counts, avg_scores, on='Player', how='outer').fillna(0)
     hall_of_fame['Total Wins 👑'] = hall_of_fame['Total Wins 👑'].astype(int)
     hall_of_fame = hall_of_fame.sort_values(by='Total Wins 👑', ascending=False).reset_index(drop=True)
     hall_of_fame.index = hall_of_fame.index + 1
     
-    # Format detailed history log
     daily_winners_log = daily_winners_df[['Date', 'Player', 'Score']].rename(columns={'Player': 'Daily Champion 👑', 'Score': 'Winning Score'})
     
     return hall_of_fame, daily_winners_log
@@ -373,20 +367,21 @@ else:
                         st.success(f"🎉 All deep stats synced for {st.session_state.current_user}!")
                         st.balloons()
             
-            # --- SHARE SCORE CLIPBOARD ENGINE ---
+            # --- CONDENSED SHARE SCORE CLIPBOARD ENGINE ---
             st.markdown("### 📣 Share Your Results")
             
+            # Ultra condensed Wordle style line layout
+            emojis_line = ""
+            for r in st.session_state.game_round_history:
+                emojis_line += "🟩" if r['points_earned'] >= 4500 else ("🟨" if r['points_earned'] >= 3000 else "🟥")
+                
             summary_lines = [
-                f"📍 GeoLeader Challenge ({today_str})",
-                f"👤 Player: {st.session_state.current_user}",
-                f"🏆 Final Score: {st.session_state.total_score:,} / 25,000 pts"
+                f"📍 GeoLeader ({today_str})",
+                f"👤 {st.session_state.current_user}: {st.session_state.total_score:,} pts",
+                emojis_line,
+                "https://geoleader.streamlit.app"
             ]
             
-            for r in st.session_state.game_round_history:
-                emoji = "🟩" if r['points_earned'] >= 4500 else ("🟨" if r['points_earned'] >= 3000 else "🟥")
-                summary_lines.append(f"{emoji} R{r['round']}: {r['points_earned']:,} pts ({r['distance_km']:,} km miss)")
-            
-            summary_lines.append("\\nPlay live at: https://geoleader.streamlit.app")
             raw_js_text = "\\n".join(summary_lines)
 
             components_html = f"""
@@ -398,7 +393,7 @@ else:
                 el.select();
                 document.execCommand('copy');
                 document.body.removeChild(el);
-                alert('🏆 Score copied to clipboard! Paste it into your group chat!');
+                alert('🏆 Score copied! Send it over to the group chat!');
             }}
             </script>
             <button onclick="copyToClipboard()" style="
@@ -442,11 +437,14 @@ else:
                 st.markdown("### 📈 Running Total")
                 st.markdown(f"**{st.session_state.total_score:,} pts**")
 
-            # GUESSING PHASE
+            # GUESSING PHASE (ORBITAL GLOBE SAT RENDER)
             if not st.session_state.has_guessed:
+                # Centered over the middle of the planet at Zoom 1 to create an orbital visual capsule look
                 m = folium.Map(
-                    location=[20, 0], 
+                    location=[15.0, -25.0], 
                     zoom_start=1, 
+                    min_zoom=1,
+                    max_bounds=True,
                     tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
                     attr="Esri World Imagery"
                 )
@@ -472,7 +470,7 @@ else:
                 
                 m_reveal = folium.Map(
                     location=[mid_lat, mid_lng], 
-                    zoom_start=3, 
+                    zoom_start=2, 
                     tiles="https://{s}.basemaps.cartocdn.com/rastertiles/light_nolabels/{z}/{x}/{y}.png",
                     attr="CartoDB Positron No Labels"
                 )
