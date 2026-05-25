@@ -443,14 +443,19 @@ else:
             if not st.session_state.has_guessed:
                 # Centered over the middle of the planet at Zoom 1 to create an orbital visual capsule look
                 m = folium.Map(
-                    location=[20, 0], 
-                    zoom_start=1, 
-                    tiles="Esri Satellite", 
-                    zoom_control=True,        # Set to True so you can zoom
-                    scrollWheelZoom=True,     # Set to True so you can scroll
-                    dragging=True             # Set to True so you can pan/rotate
+                    location=[15.0, -25.0], 
+                    zoom_start=2, 
+                    tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+                    attr="Esri World Imagery",
+                    zoom_control=True,      # Enable zoom +/- buttons
+                    scrollWheelZoom=True    # Enable mouse wheel scrolling
                 )
-                map_click_data = st_folium(m, width=900, height=500, key=f"map_r_{round_num}")
+                map_click_data = st_folium(
+                    m, 
+                    width=900, 
+                    height=500, 
+                    key=f"map_r_{round_num}"
+                )
                 
                 if map_click_data and map_click_data.get("last_clicked"):
                     click_lat = map_click_data["last_clicked"]["lat"]
