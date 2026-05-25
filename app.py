@@ -272,12 +272,14 @@ if "score_submitted" not in st.session_state:
 st.set_page_config(page_title="GeoLeader", page_icon="📍", layout="wide")
 
 st.markdown("""
-    <style>
-    .folium-map, .leaflet-container, .leaflet-interactive, .leaflet-pane, .leaflet-grab, .leaflet-dragging {
-        cursor: crosshair !important;
-    }
-    .leaflet-grab:active, .leaflet-dragging:active {
-        cursor: crosshair !important;
+<style>
+    .folium-container { 
+        border-radius: 50% !important; 
+        border: 8px solid #333; 
+        overflow: hidden; 
+        margin: 20px auto; 
+        /* Ensure the map stays circular even during interaction */
+        clip-path: circle(50%); 
     }
     </style>
     """, unsafe_allow_html=True)
@@ -441,12 +443,12 @@ else:
             if not st.session_state.has_guessed:
                 # Centered over the middle of the planet at Zoom 1 to create an orbital visual capsule look
                 m = folium.Map(
-                    location=[15.0, -25.0], 
+                    location=[20, 0], 
                     zoom_start=1, 
-                    min_zoom=1,
-                    max_bounds=True,
-                    tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-                    attr="Esri World Imagery"
+                    tiles="Esri Satellite", 
+                    zoom_control=True,        # Set to True so you can zoom
+                    scrollWheelZoom=True,     # Set to True so you can scroll
+                    dragging=True             # Set to True so you can pan/rotate
                 )
                 map_click_data = st_folium(m, width=900, height=500, key=f"map_r_{round_num}")
                 
